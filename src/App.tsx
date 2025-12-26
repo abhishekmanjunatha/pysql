@@ -19,9 +19,16 @@ function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [expandedTables, setExpandedTables] = useState<string[]>([]);
   const [schema, setSchema] = useState<any[]>([]);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeChallenge = challenges[activeChallengeIndex];
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     initDuckDB().then(() => setIsReady(true));
@@ -159,43 +166,46 @@ function App() {
 
   return (
     <div className={clsx("h-screen w-screen flex flex-col transition-colors duration-200", theme === 'dark' ? 'dark bg-slate-950 text-slate-200' : 'bg-slate-50 text-slate-800')}>
-      <header className="h-14 border-b border-slate-200 dark:border-slate-800 flex items-center px-4 justify-between bg-white dark:bg-slate-900 transition-colors">
-        <div className="flex items-center gap-6">
+      <header className="h-14 border-b border-slate-200 dark:border-slate-800 flex items-center px-4 justify-between bg-white dark:bg-slate-900 transition-colors shrink-0">
+        <div className="flex items-center gap-2 md:gap-6">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-emerald-500/10 rounded flex items-center justify-center text-emerald-500">
+            <div className="w-8 h-8 bg-emerald-500/10 rounded flex items-center justify-center text-emerald-500 shrink-0">
               <Database size={18} />
             </div>
-            <h1 className="font-bold text-lg text-slate-800 dark:text-slate-100">SQLista - SQL Pipeline Plumber</h1>
+            <h1 className="font-bold text-lg text-slate-800 dark:text-slate-100 whitespace-nowrap">
+              <span className="hidden md:inline">SQLista - SQL Pipeline Plumber</span>
+              <span className="md:hidden">SQLista</span>
+            </h1>
           </div>
           
           {/* Tab Switcher */}
-          <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-1 gap-1">
+          <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-1 gap-1 shrink-0">
             <button
               onClick={() => setActiveTab('challenges')}
               className={clsx(
-                "px-3 py-1 rounded-md text-sm font-medium transition-all flex items-center gap-2",
+                "px-2 md:px-3 py-1 rounded-md text-sm font-medium transition-all flex items-center gap-2",
                 activeTab === 'challenges' 
                   ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" 
                   : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               )}
             >
-              <BookOpen size={14} /> Challenges
+              <BookOpen size={14} /> <span className="hidden sm:inline">Challenges</span>
             </button>
             <button
               onClick={() => setActiveTab('playground')}
               className={clsx(
-                "px-3 py-1 rounded-md text-sm font-medium transition-all flex items-center gap-2",
+                "px-2 md:px-3 py-1 rounded-md text-sm font-medium transition-all flex items-center gap-2",
                 activeTab === 'playground' 
                   ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" 
                   : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               )}
             >
-              <Terminal size={14} /> Playground
+              <Terminal size={14} /> <span className="hidden sm:inline">Playground</span>
             </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3">
           <button
             onClick={toggleTheme}
             className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -206,27 +216,27 @@ function App() {
 
           <button 
             onClick={handleRun}
-            className="px-4 py-1.5 rounded text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors flex items-center gap-2"
+            className="px-3 md:px-4 py-1.5 rounded text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors flex items-center gap-2"
           >
-            <Play size={16} /> Run
+            <Play size={16} /> <span className="hidden sm:inline">Run</span>
           </button>
           
           {activeTab === 'challenges' && (
             <button 
               onClick={handleSubmit}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded flex items-center gap-2 font-medium transition-colors shadow-lg shadow-emerald-900/20"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 md:px-4 py-1.5 rounded flex items-center gap-2 font-medium transition-colors shadow-lg shadow-emerald-900/20"
             >
-              <CheckCircle size={16} /> Submit Solution
+              <CheckCircle size={16} /> <span className="hidden sm:inline">Submit</span>
             </button>
           )}
         </div>
       </header>
       
       <div className="flex-1 flex overflow-hidden">
-        <PanelGroup orientation="horizontal" className="h-full w-full">
+        <PanelGroup orientation={isMobile ? "vertical" : "horizontal"} className="h-full w-full">
           {/* Sidebar */}
-          <Panel defaultSize="20" minSize="15" maxSize="40" collapsible>
-            <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-900/50 border-r border-slate-200 dark:border-slate-800 transition-colors">
+          <Panel defaultSize={isMobile ? 30 : 20} minSize={15} maxSize={isMobile ? 50 : 40} collapsible>
+            <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-900/50 border-r border-b md:border-b-0 border-slate-200 dark:border-slate-800 transition-colors">
               {activeTab === 'challenges' ? (
                 <>
                   <div className="p-4 border-b border-slate-200 dark:border-slate-800">
@@ -355,7 +365,10 @@ function App() {
             </div>
           </Panel>
 
-          <PanelResizeHandle className="w-1 bg-slate-200 dark:bg-slate-800 hover:bg-emerald-500 dark:hover:bg-emerald-500 transition-colors cursor-col-resize flex-none" />
+          <PanelResizeHandle className={clsx(
+            "bg-slate-200 dark:bg-slate-800 hover:bg-emerald-500 dark:hover:bg-emerald-500 transition-colors flex-none",
+            isMobile ? "h-1 cursor-row-resize" : "w-1 cursor-col-resize"
+          )} />
 
           {/* Editor & Results */}
           <Panel>

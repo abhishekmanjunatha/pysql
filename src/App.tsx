@@ -239,9 +239,9 @@ function App() {
         >
           {/* Sidebar */}
           <Panel 
-            defaultSize={isMobile ? 30 : 20} 
-            minSize={15} 
-            maxSize={isMobile ? 50 : 40} 
+            defaultSize={isMobile ? "30" : "20"} 
+            minSize="15" 
+            maxSize={isMobile ? "50" : "40"} 
           >
             <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-900/50 border-r border-b md:border-b-0 border-slate-200 dark:border-slate-800 transition-colors">
               {activeTab === 'challenges' ? (
@@ -378,7 +378,7 @@ function App() {
           )} />
 
           {/* Editor & Results */}
-          <Panel>
+          <Panel defaultSize={isMobile ? "70" : "80"}>
             <PanelGroup orientation="vertical" className="h-full w-full">
               <Panel defaultSize="60" minSize="20" collapsible>
                 <div className="h-full relative bg-white dark:bg-[#1e1e1e]">

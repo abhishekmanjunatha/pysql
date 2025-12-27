@@ -11,7 +11,7 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
-  base: '/SQLista/',
+  base: '/pysql/',
   server: {
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",

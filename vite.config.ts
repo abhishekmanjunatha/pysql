@@ -8,6 +8,9 @@ export default defineConfig({
     '__APP_VERSION__': JSON.stringify(packageJson.version),
   },
   plugins: [react()],
+  worker: {
+    format: 'es',
+  },
   base: '/SQLista/',
   server: {
     headers: {

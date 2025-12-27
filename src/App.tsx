@@ -1,19 +1,57 @@
 import { useEffect, useState, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
-import { initDuckDB, runQuery, resetTable, importCSV, getDatabaseSchema } from './lib/duckdb';
+import { initDuckDB, runQuery, resetTable, importCSV, getDatabaseSchema, runQueryToParquet } from './lib/duckdb';
 import { challenges } from './lib/challenges';
 import { EMPLOYEE_DATASET_SQL } from './lib/playground-data.ts';
-import { Play, Loader2, CheckCircle, XCircle, ChevronRight, Terminal, BookOpen, Database, Sun, Moon, ChevronDown, Upload } from 'lucide-react';
+import { Play, Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, Terminal, BookOpen, Database, Sun, Moon, ChevronDown, Upload, Code2, Lightbulb, Key, X } from 'lucide-react';
 import clsx from 'clsx';
+import PyodideWorker from './workers/pyodide.worker.ts?worker';
+
+// Simple Modal Component
+const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-md border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-200">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800">
+          <h3 className="font-bold text-slate-800 dark:text-slate-100">{title}</h3>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="p-4 max-h-[80vh] overflow-y-auto">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 function App() {
   const [isReady, setIsReady] = useState(false);
+  const [isPythonReady, setIsPythonReady] = useState(false);
   const [activeTab, setActiveTab] = useState<'challenges' | 'playground'>('challenges');
   const [activeChallengeIndex, setActiveChallengeIndex] = useState(0);
+  const [sidebarView, setSidebarView] = useState<'list' | 'details'>('list');
+  const [language, setLanguage] = useState<'sql' | 'python'>('sql');
+  
+  const [showHint, setShowHint] = useState(false);
+
   const [code, setCode] = useState("");
+  const [pythonCode, setPythonCode] = useState(`import pandas as pd
+
+# Get the result of your last SQL query
+df = get_dataframe("output")
+
+# Perform your analysis
+print(df.head())
+print(df.describe())
+`);
   const [playgroundCode, setPlaygroundCode] = useState("SELECT * FROM employees LIMIT 10;");
+  
   const [result, setResult] = useState<any>(null);
+  const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [validationStatus, setValidationStatus] = useState<'idle' | 'success' | 'failure'>('idle');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -21,6 +59,7 @@ function App() {
   const [schema, setSchema] = useState<any[]>([]);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const workerRef = useRef<Worker | null>(null);
 
   const activeChallenge = challenges[activeChallengeIndex];
 
@@ -32,6 +71,34 @@ function App() {
 
   useEffect(() => {
     initDuckDB().then(() => setIsReady(true));
+    
+    // Init Python Worker
+    workerRef.current = new PyodideWorker();
+    workerRef.current.onmessage = (event) => {
+      const { type, message, tableName } = event.data;
+      if (type === 'READY') {
+        setIsPythonReady(true);
+        setConsoleOutput(prev => [...prev, "Python environment ready."]);
+      } else if (type === 'STATUS') {
+        setConsoleOutput(prev => [...prev, `[System] ${message}`]);
+      } else if (type === 'STDOUT') {
+        setConsoleOutput(prev => [...prev, message]);
+      } else if (type === 'STDERR') {
+        setConsoleOutput(prev => [...prev, `Error: ${message}`]);
+      } else if (type === 'ERROR') {
+        setError(message);
+        setConsoleOutput(prev => [...prev, `Error: ${message}`]);
+      } else if (type === 'DATA_LOADED') {
+        setConsoleOutput(prev => [...prev, `[System] Data loaded into Python as '${tableName}'`]);
+      } else if (type === 'EXECUTION_COMPLETE') {
+        // Execution finished
+      }
+    };
+    workerRef.current.postMessage({ type: 'INIT' });
+
+    return () => {
+      workerRef.current?.terminate();
+    };
   }, []);
 
   // Toggle Theme
@@ -106,22 +173,50 @@ function App() {
 
   const handleCodeChange = (value: string | undefined) => {
     const newCode = value || "";
-    setCode(newCode);
-    if (activeTab === 'playground') {
-      setPlaygroundCode(newCode);
+    if (language === 'sql') {
+      setCode(newCode);
+      if (activeTab === 'playground') {
+        setPlaygroundCode(newCode);
+      }
+    } else {
+      setPythonCode(newCode);
     }
   };
 
   const handleRun = async () => {
     setError(null);
     setValidationStatus('idle');
-    try {
-      const res = await runQuery(code);
-      const rows = res.toArray().map((row: any) => row.toJSON());
-      setResult(rows);
-      await refreshSchema();
-    } catch (err: any) {
-      setError(err.message);
+    
+    if (language === 'sql') {
+      try {
+        // Run SQL for display
+        const res = await runQuery(code);
+        const rows = res.toArray().map((row: any) => row.toJSON());
+        setResult(rows);
+        await refreshSchema();
+
+        // Export to Parquet and send to Python
+        if (isPythonReady && workerRef.current) {
+          try {
+            const parquetBuffer = await runQueryToParquet(code);
+            workerRef.current.postMessage({ 
+              type: 'LOAD_DATA', 
+              buffer: parquetBuffer, 
+              tableName: 'output' 
+            }, [parquetBuffer.buffer]);
+          } catch (err) {
+            console.warn("Failed to export to parquet for python", err);
+          }
+        }
+
+      } catch (err: any) {
+        setError(err.message);
+      }
+    } else {
+      // Run Python
+      if (!isPythonReady || !workerRef.current) return;
+      setConsoleOutput([]); // Clear previous output
+      workerRef.current.postMessage({ type: 'RUN_PYTHON', code: pythonCode });
     }
   };
 
@@ -173,8 +268,8 @@ function App() {
               <Database size={18} />
             </div>
             <h1 className="font-bold text-lg text-slate-800 dark:text-slate-100 whitespace-nowrap">
-              <span className="hidden md:inline">SQLista - SQL Pipeline Plumber</span>
-              <span className="md:hidden">SQLista</span>
+              <span className="hidden md:inline">DataGym - PySQL Studio</span>
+              <span className="md:hidden">DataGym</span>
             </h1>
           </div>
           
@@ -214,11 +309,39 @@ function App() {
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
 
+          {activeTab === 'challenges' && (
+            <>
+              <button
+                onClick={() => setShowHint(true)}
+                className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                title="Show Hint"
+              >
+                <Lightbulb size={18} />
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm("This will replace your current code with the solution. Are you sure?")) {
+                    setCode(activeChallenge.solution);
+                  }
+                }}
+                className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                title="Show Solution"
+              >
+                <Key size={18} />
+              </button>
+            </>
+          )}
+
           <button 
             onClick={handleRun}
-            className="px-3 md:px-4 py-1.5 rounded text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors flex items-center gap-2"
+            disabled={language === 'python' && !isPythonReady}
+            className={clsx(
+              "px-3 md:px-4 py-1.5 rounded text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors flex items-center gap-2",
+              language === 'python' && !isPythonReady && "opacity-50 cursor-not-allowed"
+            )}
           >
-            <Play size={16} /> <span className="hidden sm:inline">Run</span>
+            {language === 'python' && !isPythonReady ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />} 
+            <span className="hidden sm:inline">Run</span>
           </button>
           
           {activeTab === 'challenges' && (
@@ -245,14 +368,19 @@ function App() {
           >
             <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-900/50 border-r border-b md:border-b-0 border-slate-200 dark:border-slate-800 transition-colors">
               {activeTab === 'challenges' ? (
-                <>
-                  <div className="p-4 border-b border-slate-200 dark:border-slate-800">
-                    <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Challenges</h2>
-                    <div className="space-y-1">
+                sidebarView === 'list' ? (
+                  <div className="h-full flex flex-col">
+                    <div className="p-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
+                      <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Challenges</h2>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2 space-y-1">
                       {challenges.map((c, i) => (
                         <button
                           key={c.id}
-                          onClick={() => setActiveChallengeIndex(i)}
+                          onClick={() => {
+                            setActiveChallengeIndex(i);
+                            setSidebarView('details');
+                          }}
                           className={clsx(
                             "w-full text-left px-3 py-2 rounded text-sm transition-colors flex items-center justify-between group",
                             i === activeChallengeIndex 
@@ -260,24 +388,55 @@ function App() {
                               : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 border border-transparent"
                           )}
                         >
-                          <span>{i + 1}. {c.title}</span>
-                          {i === activeChallengeIndex && <ChevronRight size={14} />}
+                          <span className="truncate">{c.title}</span>
+                          <ChevronRight size={14} className="shrink-0 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300" />
                         </button>
                       ))}
                     </div>
                   </div>
-                  
-                  <div className="flex-1 overflow-y-auto p-4">
-                    <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-2">{activeChallenge.title}</h2>
-                    <p className="text-slate-600 dark:text-slate-400 text-sm mb-4 leading-relaxed">
-                      {activeChallenge.description}
-                    </p>
-                    <div className="p-4 bg-white dark:bg-slate-800/50 rounded border border-slate-200 dark:border-slate-700/50 shadow-sm dark:shadow-none">
-                      <h3 className="text-xs font-bold text-slate-500 dark:text-slate-300 uppercase mb-2">Task</h3>
-                      <p className="text-sm text-slate-700 dark:text-slate-300">{activeChallenge.task}</p>
+                ) : (
+                  <div className="h-full flex flex-col">
+                    <div className="p-4 border-b border-slate-200 dark:border-slate-800 shrink-0 flex items-center gap-2">
+                      <button 
+                        onClick={() => setSidebarView('list')}
+                        className="p-1 -ml-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors"
+                        title="Back to Challenges"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                      <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Challenge Details</h2>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4">
+                      <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-2">{activeChallenge.title}</h2>
+                      <div className="text-slate-600 dark:text-slate-400 text-sm mb-4 leading-relaxed whitespace-pre-wrap">
+                        {activeChallenge.description}
+                      </div>
+
+                      {activeChallenge.concepts && activeChallenge.concepts.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-4">
+                          {activeChallenge.concepts.map((concept, i) => (
+                            <span key={i} className="px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs font-medium border border-blue-100 dark:border-blue-800/30">
+                              {concept}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {activeChallenge.expectedOutput && (
+                        <div className="mt-4">
+                          <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Expected Output</h3>
+                          <div className="bg-slate-100 dark:bg-slate-900 rounded p-2 overflow-x-auto border border-slate-200 dark:border-slate-800">
+                            <pre className="text-xs font-mono text-slate-700 dark:text-slate-300 whitespace-pre">{activeChallenge.expectedOutput}</pre>
+                          </div>
+                        </div>
+                      )}
+                      <div className="p-4 bg-white dark:bg-slate-800/50 rounded border border-slate-200 dark:border-slate-700/50 shadow-sm dark:shadow-none mt-4">
+                        <h3 className="text-xs font-bold text-slate-500 dark:text-slate-300 uppercase mb-2">Task</h3>
+                        <p className="text-sm text-slate-700 dark:text-slate-300">{activeChallenge.task}</p>
+                      </div>
                     </div>
                   </div>
-                </>
+                )
               ) : (
                 <div className="flex-1 overflow-y-auto p-4">
                   <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-2">Playground Mode</h2>
@@ -381,23 +540,60 @@ function App() {
           <Panel defaultSize={isMobile ? "70" : "80"}>
             <PanelGroup orientation="vertical" className="h-full w-full">
               <Panel defaultSize="60" minSize="20" collapsible>
-                <div className="h-full relative bg-white dark:bg-[#1e1e1e]">
-                  <Editor
-                    height="100%"
-                    defaultLanguage="sql"
-                    theme={theme === 'dark' ? "vs-dark" : "light"}
-                    value={code}
-                    onChange={handleCodeChange}
-                    onMount={handleEditorDidMount}
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 14,
-                      padding: { top: 24 },
-                      fontFamily: "'JetBrains Mono', monospace",
-                      scrollBeyondLastLine: false,
-                      automaticLayout: true,
-                    }}
-                  />
+                <div className="h-full relative bg-white dark:bg-[#1e1e1e] flex flex-col">
+                  {/* Language Switcher */}
+                  <div className="h-10 border-b border-slate-200 dark:border-slate-800 flex items-center px-4 gap-4 bg-slate-50 dark:bg-slate-900/50">
+                    <button
+                      onClick={() => setLanguage('sql')}
+                      className={clsx(
+                        "text-xs font-bold uppercase tracking-wider flex items-center gap-2 pb-2.5 pt-3 border-b-2 transition-colors",
+                        language === 'sql' 
+                          ? "border-emerald-500 text-emerald-600 dark:text-emerald-400" 
+                          : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                      )}
+                    >
+                      <Database size={14} /> SQL
+                    </button>
+                    <button
+                      onClick={() => setLanguage('python')}
+                      className={clsx(
+                        "text-xs font-bold uppercase tracking-wider flex items-center gap-2 pb-2.5 pt-3 border-b-2 transition-colors",
+                        language === 'python' 
+                          ? "border-blue-500 text-blue-600 dark:text-blue-400" 
+                          : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                      )}
+                    >
+                      <Code2 size={14} /> Python
+                    </button>
+                    
+                    <div className="flex-1" />
+                    
+                    {!isPythonReady && (
+                      <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                        <Loader2 size={10} className="animate-spin" /> Loading Python...
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex-1 relative">
+                    <Editor
+                      height="100%"
+                      defaultLanguage={language}
+                      language={language}
+                      theme={theme === 'dark' ? "vs-dark" : "light"}
+                      value={language === 'sql' ? code : pythonCode}
+                      onChange={handleCodeChange}
+                      onMount={handleEditorDidMount}
+                      options={{
+                        minimap: { enabled: false },
+                        fontSize: 14,
+                        padding: { top: 24 },
+                        fontFamily: "'JetBrains Mono', monospace",
+                        scrollBeyondLastLine: false,
+                        automaticLayout: true,
+                      }}
+                    />
+                  </div>
                 </div>
               </Panel>
               
@@ -406,7 +602,9 @@ function App() {
               <Panel defaultSize="40" minSize="10" collapsible>
                 <div className="h-full bg-slate-50 dark:bg-slate-900 flex flex-col border-t border-slate-200 dark:border-slate-800 transition-colors">
                   <div className="h-10 bg-white dark:bg-slate-800/50 px-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 shrink-0 transition-colors">
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Query Results</span>
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      {language === 'sql' ? "Query Results" : "Console Output"}
+                    </span>
                     {activeTab === 'challenges' && validationStatus === 'success' && (
                       <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-sm font-medium bg-emerald-100 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">
                         <CheckCircle size={14} /> Correct Answer
@@ -428,7 +626,7 @@ function App() {
                       </div>
                     )}
                     
-                    {result && (
+                    {language === 'sql' && result && (
                       <table className="w-full text-left border-collapse text-sm font-mono">
                         <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 z-10 shadow-sm">
                           <tr>
@@ -450,8 +648,21 @@ function App() {
                         </tbody>
                       </table>
                     )}
+
+                    {language === 'python' && (
+                      <div className="p-4 font-mono text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                        {consoleOutput.map((line, i) => (
+                          <div key={i} className="mb-1">{line}</div>
+                        ))}
+                        {consoleOutput.length === 0 && !error && (
+                          <div className="text-slate-400 dark:text-slate-600 italic">
+                            Run Python code to see output...
+                          </div>
+                        )}
+                      </div>
+                    )}
                     
-                    {!result && !error && (
+                    {language === 'sql' && !result && !error && (
                       <div className="h-full flex items-center justify-center text-slate-400 dark:text-slate-600 text-sm italic">
                         Run a query to see results...
                       </div>
@@ -467,12 +678,22 @@ function App() {
       {/* Footer */}
       <footer className="h-8 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex items-center justify-between px-4 text-xs text-slate-500 dark:text-slate-400 transition-colors">
         <div>
-          SQLista v1.0.0
+          DataGym v{__APP_VERSION__}
         </div>
         <div>
           Created by <span className="font-medium text-slate-700 dark:text-slate-300">Abhishek Manjunath</span>
         </div>
       </footer>
+
+      <Modal
+        isOpen={showHint}
+        onClose={() => setShowHint(false)}
+        title="Hint"
+      >
+        <div className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
+          {activeChallenge.hint}
+        </div>
+      </Modal>
     </div>
   );
 }

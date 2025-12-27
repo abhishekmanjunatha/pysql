@@ -1,9 +1,10 @@
-# SQL Pipeline Plumber
+# DataGym - PySQL Studio
 
-An interactive SQL practice tool for Data Engineers, powered by DuckDB-WASM.
+An interactive SQL & Python practice tool for Data Engineers, powered by DuckDB-WASM and Pyodide.
 
 ## Features
-- **Browser-based OLAP:** Runs entirely in your browser using DuckDB-WASM.
+- **Dual Engine:** Run SQL (DuckDB) and Python (Pandas) in the same environment.
+- **Browser-based OLAP:** Runs entirely in your browser.
 - **Real Engineering Scenarios:** Fix broken pipelines, clean dirty data, and optimize queries.
 - **Interactive Editor:** Monaco Editor with SQL syntax highlighting.
 - **Playground Mode:** Explore a sample employee dataset with an interactive schema browser.

@@ -36,6 +36,15 @@ export async function runQuery(query: string) {
     return await conn.query(query);
 }
 
+export async function runQueryToParquet(query: string): Promise<Uint8Array> {
+    if (!conn) throw new Error("Database not initialized");
+    // Copy to parquet
+    await conn.query(`COPY (${query}) TO 'output.parquet' (FORMAT PARQUET)`);
+    // Read the file back as buffer
+    const buffer = await db!.copyFileToBuffer('output.parquet');
+    return buffer;
+}
+
 export async function resetTable(setupSql: string) {
     if (!conn) throw new Error("Database not initialized");
     // Drop all tables to ensure clean state (simplified for now)

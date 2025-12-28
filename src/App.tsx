@@ -4,7 +4,7 @@ import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "reac
 import { initDuckDB, runQuery, resetTable, importCSV, getDatabaseSchema, runQueryToParquet } from './lib/duckdb';
 import { challenges } from './lib/challenges';
 import { EMPLOYEE_DATASET_SQL } from './lib/playground-data.ts';
-import { Play, Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, Terminal, BookOpen, Database, Sun, Moon, ChevronDown, Upload, Code2, Lightbulb, Key, Lock, Settings, Bot } from 'lucide-react';
+import { Play, Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, Terminal, BookOpen, Database, Sun, Moon, ChevronDown, Upload, Code2, Lightbulb, Key, Lock, Settings } from 'lucide-react';
 import clsx from 'clsx';
 import PyodideWorker from './workers/pyodide.worker.ts?worker';
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
@@ -731,7 +731,7 @@ print(df.describe())
 
       <Modal
         isOpen={showHint}
-        onClose={() => { setShowHint(false); setAiResponse(null); }}
+        onClose={() => setShowHint(false)}
         title="Hint"
       >
         <div className="space-y-4">
@@ -748,11 +748,12 @@ print(df.describe())
 
       <SignedIn>
         <AiChatWidget 
-          code={code}
+          code={language === 'sql' ? code : pythonCode}
+          language={language}
           error={error}
           schema={schema}
           activeChallenge={activeChallenge}
-          onReplaceCode={(newCode) => setCode(newCode)}
+          onReplaceCode={(newCode) => language === 'sql' ? setCode(newCode) : setPythonCode(newCode)}
         />
       </SignedIn>
     </div>

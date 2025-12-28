@@ -7,15 +7,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { provider, apiKey, query, error, schema, context, messages } = req.body;
+    const { provider, apiKey, query, language, error, schema, context, messages } = req.body;
 
     if (!apiKey) {
       return res.status(401).json({ error: 'Missing API Key' });
     }
 
     const systemPrompt = `
-You are an expert SQL Assistant for a Data Engineering platform.
-Your goal is to help the user write correct SQL queries.
+You are an expert ${language === 'python' ? 'Python/Pandas' : 'SQL'} Assistant for a Data Engineering platform.
+Your goal is to help the user write correct ${language === 'python' ? 'Python code' : 'SQL queries'}.
 
 Context:
 - Challenge: "${context?.title || 'Playground'}"
@@ -23,13 +23,13 @@ Context:
 - Schema: ${JSON.stringify(schema)}
 
 Current State:
-- User's Query: ${query}
+- User's Code: ${query}
 - Error: ${error || 'None'}
 
 Instructions:
 1. Be concise and direct.
-2. If the user asks for a fix, PROVIDE THE SQL CODE.
-3. Wrap SQL code in markdown blocks like: \`\`\`sql ... \`\`\`
+2. If the user asks for a fix, PROVIDE THE CODE.
+3. Wrap code in markdown blocks like: \`\`\`${language || 'sql'} ... \`\`\`
 4. Explain the logic briefly.
 `;
 

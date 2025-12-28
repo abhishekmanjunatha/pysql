@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bot, Send, X, Loader2, Code2, Check, Copy, Terminal } from 'lucide-react';
+import { Bot, Send, X, Loader2, Copy, Terminal } from 'lucide-react';
 import clsx from 'clsx';
 
 interface Message {
@@ -9,13 +9,14 @@ interface Message {
 
 interface AiChatWidgetProps {
   code: string;
+  language: 'sql' | 'python';
   error: string | null;
   schema: any[];
   activeChallenge: any;
   onReplaceCode: (newCode: string) => void;
 }
 
-export function AiChatWidget({ code, error, schema, activeChallenge, onReplaceCode }: AiChatWidgetProps) {
+export function AiChatWidget({ code, language, error, schema, activeChallenge, onReplaceCode }: AiChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -54,6 +55,7 @@ export function AiChatWidget({ code, error, schema, activeChallenge, onReplaceCo
           provider: 'groq',
           apiKey: groqKey,
           query: code,
+          language,
           error: error,
           schema,
           context: activeChallenge,
@@ -85,15 +87,16 @@ export function AiChatWidget({ code, error, schema, activeChallenge, onReplaceCo
   }, [isOpen]);
 
   const renderMessageContent = (content: string) => {
-    const parts = content.split(/(```sql[\s\S]*?```)/g);
+    const parts = content.split(/(```(?:sql|python)[\s\S]*?```)/g);
     
     return parts.map((part, index) => {
-      if (part.startsWith('```sql')) {
-        const codeBlock = part.replace(/```sql\n?|```/g, '').trim();
+      if (part.startsWith('```')) {
+        const codeBlock = part.replace(/```(?:sql|python)?\n?|```/g, '').trim();
+        const isPython = part.startsWith('```python');
         return (
           <div key={index} className="my-3 rounded-md overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
             <div className="flex items-center justify-between px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-              <span className="text-xs font-medium text-slate-500">SQL</span>
+              <span className="text-xs font-medium text-slate-500">{isPython ? 'Python' : 'SQL'}</span>
               <div className="flex gap-2">
                 <button 
                   onClick={() => navigator.clipboard.writeText(codeBlock)}

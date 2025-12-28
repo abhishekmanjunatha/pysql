@@ -49,7 +49,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Google Gemini API Key</label>
+          <div className="flex justify-between items-center">
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Google Gemini API Key</label>
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-xs text-blue-500 hover:underline">Get Key &rarr;</a>
+          </div>
           <input
             type="password"
             value={geminiKey}

@@ -4,29 +4,12 @@ import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "reac
 import { initDuckDB, runQuery, resetTable, importCSV, getDatabaseSchema, runQueryToParquet } from './lib/duckdb';
 import { challenges } from './lib/challenges';
 import { EMPLOYEE_DATASET_SQL } from './lib/playground-data.ts';
-import { Play, Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, Terminal, BookOpen, Database, Sun, Moon, ChevronDown, Upload, Code2, Lightbulb, Key, X } from 'lucide-react';
+import { Play, Loader2, CheckCircle, XCircle, ChevronRight, ChevronLeft, Terminal, BookOpen, Database, Sun, Moon, ChevronDown, Upload, Code2, Lightbulb, Key, X, Lock, Settings } from 'lucide-react';
 import clsx from 'clsx';
 import PyodideWorker from './workers/pyodide.worker.ts?worker';
-
-// Simple Modal Component
-const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-md border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-200">
-        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800">
-          <h3 className="font-bold text-slate-800 dark:text-slate-100">{title}</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="p-4 max-h-[80vh] overflow-y-auto">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-};
+import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from "@clerk/clerk-react";
+import { Modal } from './components/Modal';
+import { SettingsModal } from './components/SettingsModal';
 
 function App() {
   const [isReady, setIsReady] = useState(false);
@@ -37,6 +20,8 @@ function App() {
   const [language, setLanguage] = useState<'sql' | 'python'>('sql');
   
   const [showHint, setShowHint] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const { isSignedIn } = useUser();
 
   const [code, setCode] = useState("");
   const [pythonCode, setPythonCode] = useState(`import pandas as pd
@@ -326,13 +311,26 @@ print(df.describe())
 
           {activeTab === 'challenges' && (
             <>
-              <button
-                onClick={() => setShowHint(true)}
-                className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                title="Show Hint"
-              >
-                <Lightbulb size={18} />
-              </button>
+              <SignedIn>
+                <button
+                  onClick={() => setShowHint(true)}
+                  className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  title="Show Hint"
+                >
+                  <Lightbulb size={18} />
+                </button>
+              </SignedIn>
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <button
+                    className="p-2 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    title="Sign in to see hints"
+                  >
+                    <Lock size={18} />
+                  </button>
+                </SignInButton>
+              </SignedOut>
+
               <button
                 onClick={() => {
                   if (confirm("This will replace your current code with the solution. Are you sure?")) {
@@ -346,6 +344,26 @@ print(df.describe())
               </button>
             </>
           )}
+
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
+
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors">
+                Sign In
+              </button>
+            </SignInButton>
+          </SignedOut>
+          <SignedIn>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              title="AI Settings"
+            >
+              <Settings size={18} />
+            </button>
+            <UserButton afterSignOutUrl="/" />
+          </SignedIn>
 
           <button 
             onClick={handleRun}
@@ -719,6 +737,11 @@ print(df.describe())
           {activeChallenge.hint}
         </div>
       </Modal>
+
+      <SettingsModal 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)} 
+      />
     </div>
   );
 }

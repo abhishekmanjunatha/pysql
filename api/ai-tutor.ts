@@ -49,10 +49,26 @@ Instructions:
       responseText = completion.choices[0].message.content || 'No response';
     } else if (provider === 'gemini') {
       const genAI = new GoogleGenerativeAI(apiKey);
-      // Fallback to gemini-pro if flash is not available
-      const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-      const result = await model.generateContent(systemPrompt);
-      responseText = result.response.text();
+      // Try multiple models in order of preference to handle region/account availability
+      const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro', 'gemini-1.0-pro'];
+      
+      let lastError;
+      for (const modelName of modelsToTry) {
+        try {
+          const model = genAI.getGenerativeModel({ model: modelName });
+          const result = await model.generateContent(systemPrompt);
+          responseText = result.response.text();
+          break; // Success, exit loop
+        } catch (err) {
+          console.warn(`Failed to use model ${modelName}:`, err);
+          lastError = err;
+          // Continue to next model
+        }
+      }
+      
+      if (!responseText && lastError) {
+        throw lastError;
+      }
     } else if (provider === 'groq') {
       const openai = new OpenAI({ 
         apiKey, 

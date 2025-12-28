@@ -52,22 +52,21 @@ Instructions:
       // Try multiple models in order of preference to handle region/account availability
       const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro', 'gemini-1.0-pro'];
       
-      let lastError;
+      let errors = [];
       for (const modelName of modelsToTry) {
         try {
           const model = genAI.getGenerativeModel({ model: modelName });
           const result = await model.generateContent(systemPrompt);
           responseText = result.response.text();
           break; // Success, exit loop
-        } catch (err) {
-          console.warn(`Failed to use model ${modelName}:`, err);
-          lastError = err;
-          // Continue to next model
+        } catch (err: any) {
+          console.warn(`Failed to use model ${modelName}:`, err.message);
+          errors.push(`${modelName}: ${err.message}`);
         }
       }
       
-      if (!responseText && lastError) {
-        throw lastError;
+      if (!responseText) {
+        throw new Error(`All Gemini models failed. Details: ${errors.join(' | ')}`);
       }
     } else if (provider === 'groq') {
       const openai = new OpenAI({ 

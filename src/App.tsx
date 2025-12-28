@@ -11,6 +11,7 @@ import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-reac
 import { Modal } from './components/Modal';
 import { SettingsModal } from './components/SettingsModal';
 import { LandingPage } from './components/LandingPage';
+import { AiChatWidget } from './components/AiChatWidget';
 
 function Workspace() {
   const [isReady, setIsReady] = useState(false);
@@ -22,59 +23,6 @@ function Workspace() {
   
   const [showHint, setShowHint] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isAiOpen, setIsAiOpen] = useState(false);
-  const [aiResponse, setAiResponse] = useState<string | null>(null);
-  const [isAiLoading, setIsAiLoading] = useState(false);
-
-  const handleAskAI = async () => {
-    const groqKey = localStorage.getItem('groq_api_key');
-
-    let provider = 'groq';
-    let apiKey = groqKey || '';
-
-    if (!groqKey) {
-      alert("Please configure your Groq API Key in Settings first.");
-      setIsSettingsOpen(true);
-      return;
-    }
-
-    setIsAiLoading(true);
-    setAiResponse(null);
-
-    try {
-      const res = await fetch('/api/ai-tutor', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provider,
-          apiKey,
-          query: code,
-          error: error || "My query is not producing the expected result.",
-          schema,
-          context: activeChallenge
-        })
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`API Error (${res.status}): ${errorText}`);
-      }
-
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setAiResponse(data.text);
-      
-      // Increment hit count
-      const currentCount = parseInt(localStorage.getItem('groq_hit_count') || '0', 10);
-      localStorage.setItem('groq_hit_count', (currentCount + 1).toString());
-      
-    } catch (err: any) {
-      console.error("AI Tutor Error:", err);
-      setAiResponse(`Error: ${err.message}. Please check your API key and network connection.`);
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
 
   const [code, setCode] = useState("");
   const [pythonCode, setPythonCode] = useState(`import pandas as pd
@@ -793,77 +741,20 @@ print(df.describe())
         </div>
       </Modal>
 
-      {/* AI Floating Action Button */}
-      <SignedIn>
-        <button
-          onClick={() => setIsAiOpen(true)}
-          className="fixed bottom-6 right-6 p-4 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all z-50 flex items-center justify-center group"
-          title="Ask AI Tutor"
-        >
-          <Bot size={24} className="group-hover:scale-110 transition-transform" />
-        </button>
-      </SignedIn>
-
-      {/* AI Tutor Modal */}
-      <Modal
-        isOpen={isAiOpen}
-        onClose={() => setIsAiOpen(false)}
-        title="AI SQL Tutor"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            Stuck on a query? The AI Tutor can analyze your code and error message to give you a personalized hint without revealing the answer.
-          </p>
-          
-          <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-600 dark:text-slate-400 max-h-32 overflow-y-auto">
-            <div className="font-bold mb-1 text-slate-500">Current Query:</div>
-            {code}
-            {error && (
-              <>
-                <div className="font-bold mt-2 mb-1 text-red-500">Error:</div>
-                <span className="text-red-600 dark:text-red-400">{error}</span>
-              </>
-            )}
-          </div>
-
-          {!aiResponse && !isAiLoading && (
-            <button
-              onClick={handleAskAI}
-              className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
-            >
-              <Bot size={18} /> Ask AI Tutor
-            </button>
-          )}
-
-          {isAiLoading && (
-            <div className="flex flex-col items-center justify-center py-8 text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-100 dark:border-purple-900/30">
-              <Loader2 size={32} className="animate-spin mb-2" />
-              <span className="text-sm font-medium">Thinking...</span>
-            </div>
-          )}
-
-          {aiResponse && (
-            <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800/30 rounded-lg p-4 text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap animate-in fade-in slide-in-from-bottom-2 shadow-sm">
-              <div className="flex items-center gap-2 mb-2 text-purple-700 dark:text-purple-400 font-bold text-xs uppercase tracking-wider">
-                <Bot size={14} /> AI Suggestion
-              </div>
-              {aiResponse}
-              
-              <button 
-                onClick={handleAskAI}
-                className="mt-4 text-xs text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1"
-              >
-                <Bot size={12} /> Ask again
-              </button>
-            </div>
-          )}
-        </div>
-      </Modal>
-
       <SettingsModal 
         isOpen={isSettingsOpen} 
         onClose={() => setIsSettingsOpen(false)} 
       />
+
+      <SignedIn>
+        <AiChatWidget 
+          code={code}
+          error={error}
+          schema={schema}
+          activeChallenge={activeChallenge}
+          onReplaceCode={(newCode) => setCode(newCode)}
+        />
+      </SignedIn>
     </div>
   );
 }

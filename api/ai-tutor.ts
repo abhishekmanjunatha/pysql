@@ -7,37 +7,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { provider, apiKey, query, error, schema, context } = req.body;
+    const { provider, apiKey, query, error, schema, context, messages } = req.body;
 
     if (!apiKey) {
       return res.status(401).json({ error: 'Missing API Key' });
     }
 
     const systemPrompt = `
-You are a friendly and helpful SQL tutor for a Data Engineering practice platform.
-Your goal is to help the user fix their SQL query or understand a concept WITHOUT giving them the direct answer code.
-Use the Socratic method: ask guiding questions, explain the error in simple terms, or provide a similar example.
+You are an expert SQL Assistant for a Data Engineering platform.
+Your goal is to help the user write correct SQL queries.
 
 Context:
-- The user is working on a challenge: "${context?.title || 'Unknown'}"
-- Task: "${context?.task || 'Unknown'}"
+- Challenge: "${context?.title || 'Playground'}"
+- Task: "${context?.task || 'Explore data'}"
 - Schema: ${JSON.stringify(schema)}
 
-User's Query:
-${query}
-
-Error Message:
-${error}
+Current State:
+- User's Query: ${query}
+- Error: ${error || 'None'}
 
 Instructions:
-1. Analyze the error and the query.
-2. Explain *why* the error happened.
-3. Give a hint on how to fix it.
-4. DO NOT write the corrected SQL query for them.
-5. Keep it short (max 3 sentences).
+1. Be concise and direct.
+2. If the user asks for a fix, PROVIDE THE SQL CODE.
+3. Wrap SQL code in markdown blocks like: \`\`\`sql ... \`\`\`
+4. Explain the logic briefly.
 `;
 
     let responseText = '';
+    
+    // Construct conversation history
+    const conversation = [
+      { role: 'system', content: systemPrompt },
+      ...(messages || []).map((m: any) => ({ role: m.role, content: m.content })),
+    ];
+    
+    // If no messages provided (first run), add default user prompt
+    if (!messages || messages.length === 0) {
+      conversation.push({ role: 'user', content: 'Analyze my query and help me fix it.' });
+    }
 
     if (provider === 'groq') {
       const openai = new OpenAI({ 
@@ -45,9 +52,8 @@ Instructions:
         baseURL: 'https://api.groq.com/openai/v1' 
       });
       const completion = await openai.chat.completions.create({
-        // Updated to latest supported model
         model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: 'Please help me.' }],
+        messages: conversation as any,
       });
       responseText = completion.choices[0].message.content || 'No response';
     } else {

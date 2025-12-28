@@ -29,14 +29,20 @@ function Workspace() {
   const handleAskAI = async () => {
     const openaiKey = localStorage.getItem('openai_api_key');
     const geminiKey = localStorage.getItem('gemini_api_key');
+    const geminiModel = localStorage.getItem('gemini_model');
     const groqKey = localStorage.getItem('groq_api_key');
     const xaiKey = localStorage.getItem('xai_api_key');
 
     let provider = '';
     let apiKey = '';
+    let modelName = '';
 
     if (openaiKey) { provider = 'openai'; apiKey = openaiKey; }
-    else if (geminiKey) { provider = 'gemini'; apiKey = geminiKey; }
+    else if (geminiKey) { 
+      provider = 'gemini'; 
+      apiKey = geminiKey; 
+      if (geminiModel) modelName = geminiModel;
+    }
     else if (groqKey) { provider = 'groq'; apiKey = groqKey; }
     else if (xaiKey) { provider = 'xai'; apiKey = xaiKey; }
     else {
@@ -55,6 +61,7 @@ function Workspace() {
         body: JSON.stringify({
           provider,
           apiKey,
+          modelName,
           query: code,
           error: error || "My query is not producing the expected result.",
           schema,

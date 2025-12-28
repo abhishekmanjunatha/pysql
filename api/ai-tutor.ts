@@ -8,7 +8,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { provider, apiKey, query, error, schema, context } = req.body;
+    const { provider, apiKey, modelName: customModelName, query, error, schema, context } = req.body;
 
     if (!apiKey) {
       return res.status(401).json({ error: 'Missing API Key' });
@@ -49,8 +49,23 @@ Instructions:
       responseText = completion.choices[0].message.content || 'No response';
     } else if (provider === 'gemini') {
       const genAI = new GoogleGenerativeAI(apiKey);
-      // Try multiple models in order of preference to handle region/account availability
-      const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro', 'gemini-1.0-pro'];
+      
+      // If user provided a custom model, try that first and ONLY that
+      let modelsToTry = [];
+      if (customModelName) {
+        modelsToTry = [customModelName];
+      } else {
+        // Try multiple models in order of preference to handle region/account availability
+        modelsToTry = [
+          'gemini-1.5-flash',
+          'gemini-1.5-flash-001',
+          'gemini-1.5-pro',
+          'gemini-1.5-pro-001',
+          'gemini-pro',
+          'gemini-1.0-pro',
+          'gemini-1.0-pro-001'
+        ];
+      }
       
       let errors = [];
       for (const modelName of modelsToTry) {

@@ -12,6 +12,7 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+    "@clerk/clerk-react": "^5.59.2",
     "@duckdb/duckdb-wasm": "^1.33.1-dev5.0",
     "@monaco-editor/react": "^4.7.0",
     "apache-arrow": "^21.1.0",

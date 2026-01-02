@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Bot, Send, X, Loader2, Copy, Terminal } from 'lucide-react';
 import clsx from 'clsx';
+import { OpenAI } from 'openai';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -48,25 +49,43 @@ export function AiChatWidget({ code, language, error, schema, activeChallenge, o
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/ai-tutor', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provider: 'groq',
-          apiKey: groqKey,
-          query: code,
-          language,
-          error: error,
-          schema,
-          context: activeChallenge,
-          messages: newMessages
-        })
+      const systemPrompt = `
+You are an expert ${language === 'python' ? 'Python/Pandas' : 'SQL'} Assistant for a Data Engineering platform.
+Your goal is to help the user write correct ${language === 'python' ? 'Python code' : 'SQL queries'}.
+
+Context:
+- Challenge: "${activeChallenge?.title || 'Playground'}"
+- Task: "${activeChallenge?.task || 'Explore data'}"
+- Schema: ${JSON.stringify(schema)}
+
+Current State:
+- User's Code: ${code}
+- Error: ${error || 'None'}
+
+Instructions:
+1. Be concise and direct.
+2. If the user asks for a fix, PROVIDE THE CODE.
+3. Wrap code in markdown blocks like: \`\`\`${language || 'sql'} ... \`\`\`
+4. Explain the logic briefly.
+`;
+
+      const openai = new OpenAI({ 
+        apiKey: groqKey, 
+        baseURL: 'https://api.groq.com/openai/v1',
+        dangerouslyAllowBrowser: true // Required for client-side usage
       });
 
-      if (!res.ok) throw new Error(await res.text());
+      const completion = await openai.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...newMessages.map(m => ({ role: m.role, content: m.content }))
+        ] as any,
+      });
+
+      const responseText = completion.choices[0].message.content || 'No response';
       
-      const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.text }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: responseText }]);
       
       // Increment hit count
       const currentCount = parseInt(localStorage.getItem('groq_hit_count') || '0', 10);

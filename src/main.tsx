@@ -12,7 +12,8 @@ try {
   console.warn("Version info not available");
 }
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+// Fallback to the hardcoded key if the environment variable is missing (e.g. in GitHub Pages build)
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || "pk_test_YW1wbGUtbGFjZXdpbmctOC5jbGVyay5hY2NvdW50cy5kZXYk";
 
 if (!PUBLISHABLE_KEY) {
   console.error("Missing Publishable Key. Authentication will not work.")
@@ -24,7 +25,7 @@ if (!PUBLISHABLE_KEY) {
           Missing <code>VITE_CLERK_PUBLISHABLE_KEY</code> environment variable.
         </p>
         <p className="text-sm text-gray-500">
-          Please add this variable in your Vercel project settings.
+          Please add this variable in your deployment settings.
         </p>
       </div>
     </div>
